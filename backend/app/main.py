@@ -4,7 +4,7 @@ import json
 import requests
 import openai
 from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -74,16 +74,38 @@ def get_weather_overview(
     overview_response = requests.get(overview_url)
     if overview_response.status_code != 200:
         raise HTTPException(status_code=500, detail="Ошибка при вызове One Call API.")
-    overview_data = overview_response.json()
+    overview_data = overview_response.json().get("weather_overview")
 
-    # Возвращаем результат
-    return {
-        "city": city,
-        "latitude": lat,
-        "longitude": lon,
-        "overview": overview_data  # Полные данные сводки погоды
-    }
+    user_input = f"Make a prompt for Stable Diffusion which describes outfit suggestion for these location and weather: {city}, {overview_data}"
+
+    # Запрос к OpenAI Chat API
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # Или "gpt-3.5-turbo", если у вас нет доступа к gpt-4
+            messages=[
+                {"role": "system", "content": "You are an assistant that generates creative outfit suggestions based on weather data."},
+                {"role": "user", "content": user_input},
+            ],
+        )
+
+        chatgptprompt = response['choices'][0]['message']['content']
+        base64_str = call_txt2img_api(chatgptprompt)
+
+        html_content = f'<img src="data:image/png;base64,{base64_str}" alt="Generated Image"/>'
+        # Возвращаем сгенерированный текст
+        return {
+            "city": city,
+            "latitude": lat,
+            "longitude": lon,
+            "overview": overview_data,
+            "stable_diffusion_prompt": chatgptprompt,
+            "image":HTMLResponse(content=html_content)
+        }
     
+    except Exception as e:
+        return f"Error generating prompt: {e}"
+    
+
 
 def decode_and_save_base64(base64_str, save_path):
     with open(save_path, "wb") as file:
@@ -99,81 +121,10 @@ def call_api(api_endpoint, **payload):
     response = urllib.request.urlopen(request)
     return json.loads(response.read().decode('utf-8'))
 
-def call_txt2img_api(**payload):
-    # Вызов API для генерации изображения
-    response = call_api('sdapi/v1/txt2img', **payload)
-    
-    # Получаем изображения из ответа
-    images = response.get('images', [])
-    
-    # Если изображения есть, конвертируем в Base64 и возвращаем
-    if images:
-        # Предположим, что мы берем первое изображение из списка
-        image_base64 = images[0]  # Пример: если несколько изображений, используем первое
-        
-        # Декодируем и возвращаем в формате Base64
-        encoded_image = base64.b64encode(base64.b64decode(image_base64)).decode('utf-8')
-        
-        # Возвращаем Base64 строку в JSON-ответе
-        return JSONResponse(content={"image": encoded_image})
-    else:
-        return JSONResponse(status_code=400, content={"error": "No image generated."})
+def call_txt2img_api(generated_prompt):
 
-def generate_prompt_from_chatgpt(user_input):
-    """
-    Использует ChatGPT для генерации детализированного промпта.
-    """
-    response = openai.ChatCompletion.create(
-        model="gpt-4",  # Или "gpt-3.5-turbo"
-        messages=[
-            {"role": "system", "content": "You are an assistant that generates creative prompts for AI image generation."},
-            {"role": "user", "content": user_input}
-        ],
-        temperature=0.7
-    )
-    return response['choices'][0]['message']['content']
-
-def get_weather_by_city(city_name, units="metric", lang="en"):
-    """
-    Получение данных о погоде по названию города.
-    """
-    url = "http://api.openweathermap.org/data/2.5/weather"
-    params = {
-        "q": city_name,
-        "appid": WEATHER_API_KEY,
-        "units": units,
-        "lang": lang
-    }
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        return {"error": response.json().get("message", "Unknown error")}
-
-if __name__ == '__main__':
-    # Получение данных о погоде
-    city_name = "Moscow"  # Здесь можно использовать ввод от пользователя
-    weather = get_weather_by_city(city_name, lang="en")
-    if "error" in weather:
-        print(f"Ошибка: {weather['error']}")
-        weather_data = "Could not retrieve weather data."
-    else:
-        # Формируем описание погоды
-        weather_description = weather['weather'][0]['description']
-        temperature = weather['main']['temp']
-        humidity = weather['main']['humidity']
-        weather_data = f"Weather in {city_name}: {weather_description}, temperature {temperature}°C, humidity {humidity}%."
-
-    print(f"Weather data: {weather_data}")
-
-    # Генерация промпта через ChatGPT
-    user_input = f"Generate a detailed prompt for creating an outfit image using location and weather data: {weather_data}"
-    ai_generated_prompt = generate_prompt_from_chatgpt(user_input)
-    print(f"Generated prompt: {ai_generated_prompt}")
-
-    # Настройка параметров для Stable Diffusion
     payload = {
-        "prompt": ai_generated_prompt,  # Используем сгенерированный промпт
+        "prompt": generated_prompt,  # Используем сгенерированный промпт
         "negative_prompt": "",
         "seed": 1,
         "steps": 20,
@@ -185,5 +136,18 @@ if __name__ == '__main__':
         "batch_size": 1,
     }
 
-    # Генерация изображения через Stable Diffusion
-    call_txt2img_api(**payload)
+    # Вызов API для генерации изображения
+    response = call_api('sdapi/v1/txt2img', **payload)
+    
+    # Получаем изображения из ответа
+    images = response.get('images', [])
+    
+    # Если изображения есть, конвертируем в Base64 и возвращаем
+    images = response.get("images", [])
+    if images:
+        # Декодируем первое изображение
+        image_base64 = images[0]
+        return image_base64
+    else:
+        raise HTTPException(status_code=500, detail="Stable Diffusion не сгенерировал изображение.")
+
