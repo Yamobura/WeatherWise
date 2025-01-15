@@ -9,14 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to the Weather and AI Image Generator API!"}
-
-# Настройка CORS (для взаимодействия с фронтом)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173/"],
+    allow_origins=["http://localhost:5173"],  # Укажите источник фронтенда
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -67,7 +62,7 @@ def get_weather_overview(
         if reverse_geo_response.status_code != 200 or not reverse_geo_response.json():
             raise HTTPException(status_code=404, detail="Не удалось определить название города по координатам.")
         reverse_geo_data = reverse_geo_response.json()[0]
-        city = reverse_geo_data["name"]
+        city = reverse_geo_data["name"]+", "+reverse_geo_data["country"]
 
     # Вызываем One Call Overview API для получения сводки погоды
     overview_url = f"https://api.openweathermap.org/data/3.0/onecall/overview?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
@@ -75,6 +70,7 @@ def get_weather_overview(
     if overview_response.status_code != 200:
         raise HTTPException(status_code=500, detail="Ошибка при вызове One Call API.")
     overview_data = overview_response.json().get("weather_overview")
+    location_date = overview_response.json().get("date")
 
     user_input = f"Make a prompt for Stable Diffusion which describes outfit suggestion for these location and weather: {city}, {overview_data}"
 
@@ -91,15 +87,15 @@ def get_weather_overview(
         chatgptprompt = response['choices'][0]['message']['content']
         base64_str = call_txt2img_api(chatgptprompt)
 
-        html_content = f'<img src="data:image/png;base64,{base64_str}" alt="Generated Image"/>'
         # Возвращаем сгенерированный текст
         return {
             "city": city,
             "latitude": lat,
             "longitude": lon,
+            "date": location_date,
             "overview": overview_data,
-            "stable_diffusion_prompt": chatgptprompt,
-            "image":HTMLResponse(content=html_content)
+            " ": chatgptprompt,
+            "image": base64_str
         }
     
     except Exception as e:

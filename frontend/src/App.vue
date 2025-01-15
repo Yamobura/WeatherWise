@@ -1,77 +1,139 @@
-
 <script>
-import { ref, watch } from "vue";
+import { ref } from "vue";
 
 export default {
   setup() {
     const cityName = ref(""); // Название города
     const locationData = ref(null); // Данные о местоположении
     const locationError = ref(""); // Ошибка геолокации
-    const weatherData = ref(null); // Данные о погоде
-    const suggestions = ref([]); // Подсказки для автозаполнения
-
+    const weatherOverview = ref(null); // Обзор погоды
+    const generatedImage = ref(null); // Сгенерированное изображение
     const backendBaseUrl = "http://127.0.0.1:8000/"; // Адрес вашего FastAPI сервера
+    const isLoading = ref(false);
+    const locationCity = ref("");
+    const locationDate = ref("");
+    const propmtforSD = ref("");
+    const filteredCities = ref([]);
 
-    // Метод для определения текущего местоположения
-    const getLocation = () => {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const { latitude, longitude } = position.coords;
-            locationData.value = { latitude, longitude };
+    const geonamesBaseUrl = "http://api.geonames.org/searchJSON"; // URL API
+    const username = "yamobura"; // Ваш логин GeoNames
 
-          },
-          (error) => {
-            locationError.value = "Ошибка определения геолокации.";
-            console.error(error);
-          }
+    // Запрос к GeoNames API для получения городов
+    const fetchCities = async () => {
+      if (!cityName.value) {
+        filteredCities.value = [];
+        return;
+      }
+
+      const url = `${geonamesBaseUrl}?q=${encodeURIComponent(
+        cityName.value
+      )}&maxRows=10&featureClass=P&orderby=population&username=${username}`;
+
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        // Обновляем список городов
+        filteredCities.value = data.geonames.map(
+          (item) => `${item.name}, ${item.countryCode}` // Формат "City, CountryCode"
         );
-      } else {
-        locationError.value = "Геолокация не поддерживается вашим браузером.";
+      } catch (error) {
+        console.error("Ошибка получения данных GeoNames:", error);
       }
     };
 
-    async function getWeatherByCity(city) {
-    const response = await fetch(`http://127.0.0.1:8000/weather?city=${city}`);
-    const data = await response.json();
-    return data;
-}
+    // Обработка выбора города из выпадающего списка
+    const selectCity = (city) => {
+      cityName.value = city;
+      filteredCities.value = []; // Очистить список после выбора
+    };
 
-// Отправка координат для получения погоды
-async function getWeatherByCoords(lat, lon) {
-    const response = await fetch(`http://127.0.0.1:8000/weather?lat=${lat}&lon=${lon}`);
-    const data = await response.json();
-    return data;
-}
 
-// Отправка промпта для генерации изображения
-async function generateImage(prompt) {
-    const response = await fetch("http://127.0.0.1:8000/generate-image", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prompt }),
-    });
-    const data = await response.json();
-    return data.image;
-}
+    // Метод для определения текущего местоположения
+    const getLocation = async () => {
+      if (navigator.geolocation) {
+        isLoading.value = true;
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const { latitude, longitude } = position.coords;
+            locationData.value = { latitude, longitude };
 
+            try {
+          // Отправляем координаты на бэкэнд
+          const response = await fetch(
+            `${backendBaseUrl}weather?lat=${latitude}&lon=${longitude}`
+          );
+          const data = await response.json();
+          handleBackendResponse(data);
+        } catch (error) {
+          console.error("Ошибка получения данных:", error);
+        } finally {
+          isLoading.value = false; // Завершаем загрузку
+        }
+      },
+      (error) => {
+        locationError.value = "Ошибка определения геолокации.";
+        console.error(error);
+        isLoading.value = false; // Завершаем загрузку в случае ошибки
+      }
+    );
+  } else {
+    locationError.value = "Геолокация не поддерживается вашим браузером.";
+  }
+    };
+
+    // Метод для поиска города
+    const findCity = async () => {
+  if (!cityName.value) return;
+
+  isLoading.value = true; // Начало загрузки
+  try {
+    const response = await fetch(
+      `${backendBaseUrl}weather?city=${encodeURIComponent(cityName.value)}`
+    );
+    const data = await response.json();
+    handleBackendResponse(data);
+  } catch (error) {
+    console.error("Ошибка получения данных:", error);
+  } finally {
+    isLoading.value = false; // Завершаем загрузку
+  }
+};
+
+    // Обработка ответа от бэкэнда
+    const handleBackendResponse = (data) => {
+      if (data.error) {
+        console.error("Ошибка от бэкэнда:", data.error);
+        return;
+      }
+      weatherOverview.value = data.overview; // Обзор погоды
+      generatedImage.value = `data:image/png;base64,${data.image}`; // Картинка
+      locationCity.value = data.city;
+      locationDate.value = data.date;
+      propmtforSD.value = data.stable_diffusion_prompt;
+    };
 
     return {
       cityName,
       locationData,
       locationError,
-      weatherData,
-      suggestions,
+      weatherOverview,
+      generatedImage,
+      location,
+      propmtforSD,
       getLocation,
-/*       getWeatherByCity,
- */    };
+      findCity,
+      locationCity,
+      locationDate,
+      isLoading,
+      filteredCities,
+      fetchCities,
+      selectCity,
+      findCity
+    };
   },
 };
 </script>
-
-
 
 <template>
   <div class="main container mx-auto min-h-screen flex flex-col items-center">
@@ -81,14 +143,28 @@ async function generateImage(prompt) {
 
     <div class="flex flex-col items-center justify-center flex-grow">
       <h1 class="mb-4">Let us know your location to generate an outfit suggestion</h1>
+
       <form @submit.prevent="findCity" class="flex items-center">
         <div class="relative w-full">
           <input
-            type="text"
-            v-model="cityName"
-            placeholder="Enter city name"
-            class="border border-gray-400 focus:border-blue-500 focus:outline-none p-2 pl-10 pr-10 rounded w-full"
-          />
+      v-model="cityName"
+      type="text"
+      placeholder="Enter city name"
+      @input="fetchCities"
+      class="border p-2 rounded"
+    />
+
+    <!-- Выпадающий список -->
+    <ul v-if="filteredCities.length" class="dropdown">
+      <li
+        v-for="(city, index) in filteredCities"
+        :key="index"
+        @click="selectCity(city)"
+        class="dropdown-item"
+      >
+        {{ city }}
+      </li>
+    </ul>
           <button
             type="button"
             @click="getLocation"
@@ -114,41 +190,43 @@ async function generateImage(prompt) {
         </button>
       </form>
 
-      <!-- Suggestions list with translated content -->
-      <ul
-        v-if="suggestions.length > 0"
-        class="absolute z-10 bg-white border border-gray-400 rounded w-64 mt-1"
-      >
-        <li
-          v-for="(city, index) in suggestions"
-          :key="index"
-          @click="selectCity(city)"
-          class="p-2 cursor-pointer hover:bg-gray-200"
-        >
-          {{ city.name }}, {{ city.country }}
-          <!-- Display city name and country -->
-        </li>
-      </ul>
+      <div>
+  <div v-if="isLoading" class="loading-spinner">
+    <p>Loading...</p>
+  </div>
 
-      <div v-if="locationError" class="error">{{ locationError }}</div>
-      <div v-if="locationData">
-        Your location: Latitude: {{ locationData.latitude }}, Longitude:
-        {{ locationData.longitude }}
-      </div>
-      <div v-if="weatherData">
-        <p>Your city: {{ weatherData.name }}</p>
-        <p>Temperature: {{ weatherData.main.temp }}°C</p>
-        <p>Humidity: {{ weatherData.main.humidity }}%</p>
-        <p>Wind Speed: {{ weatherData.wind.speed }} m/s</p>
-        <p>Cloudiness: {{ weatherData.clouds.all }}%</p>
-        <p>Weather Code: {{ weatherData.weather[0].id }}</p>
-        <p v-if="weatherData.rain">
-          Precipitation: {{ weatherData.rain["1h"] }} mm (last hour)
-        </p>
-        <p v-if="weatherData.rain">
-          Precipitation: {{ weatherData.rain["24h"] }} mm (last 24 hours)
-        </p>
-      </div>
+  <div v-else>
+    <!-- Дата и город -->
+    <div v-if="locationCity && locationDate">
+      <div><span>Today:</span> {{ locationDate }}</div>
+      <div><span>Location:</span> {{ locationCity }}</div>
+    </div>
+
+    <!-- Обзор погоды -->
+    <div v-if="weatherOverview" class="weather-overview mt-6 text-center">
+      <h2 class="text-lg font-bold mb-2">Weather Overview</h2>
+      <p>{{ weatherOverview }}</p>
+    </div>
+
+    <!-- Картинка -->
+    <div v-if="generatedImage" class="generated-image mt-6">
+      <h2 class="text-lg font-bold mb-2">Generated Image</h2>
+      <img :src="generatedImage" alt="Generated Image" class="max-w-md rounded shadow" />
+    </div>
+
+    <!-- Ошибка -->
+    <div v-if="locationError" class="error mt-4 text-red-500">
+      {{ locationError }}
+    </div>
+  </div>
+</div>
+
+
+       
+
+     
+
+      
     </div>
   </div>
 </template>
