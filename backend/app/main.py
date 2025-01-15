@@ -3,7 +3,7 @@ import base64
 import json
 import requests
 import openai
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -72,7 +72,7 @@ def get_weather_overview(
     overview_data = overview_response.json().get("weather_overview")
     location_date = overview_response.json().get("date")
 
-    user_input = f"Make a prompt for Stable Diffusion which describes outfit suggestion for these location and weather: {city}, {overview_data}"
+    user_input = f"{location_date}, {overview_data} Describe an outfit suitable for this location and weather. The description should look like a prompt to feed the AI tool that creates an image of the outfit. No additional words, only precise description of the items. Also consider if there are any dressing cultural rules in this region."
 
     # Запрос к OpenAI Chat API
     try:
@@ -94,7 +94,7 @@ def get_weather_overview(
             "longitude": lon,
             "date": location_date,
             "overview": overview_data,
-            " ": chatgptprompt,
+            "stable_diffusion_prompt": chatgptprompt,
             "image": base64_str
         }
     
@@ -134,9 +134,6 @@ def call_txt2img_api(generated_prompt):
 
     # Вызов API для генерации изображения
     response = call_api('sdapi/v1/txt2img', **payload)
-    
-    # Получаем изображения из ответа
-    images = response.get('images', [])
     
     # Если изображения есть, конвертируем в Base64 и возвращаем
     images = response.get("images", [])

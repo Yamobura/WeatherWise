@@ -208,6 +208,11 @@ export default {
       <p>{{ weatherOverview }}</p>
     </div>
 
+    <div v-if="propmtforSD" class="promptforSD mt-6 text-center">
+      <h2 class="text-lg font-bold mb-2">Weather Overview</h2>
+      <p>{{ propmtforSD }}</p>
+    </div>
+
     <!-- Картинка -->
     <div v-if="generatedImage" class="generated-image mt-6">
       <h2 class="text-lg font-bold mb-2">Generated Image</h2>
