@@ -11,7 +11,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Укажите источник фронтенда
+    allow_origins=["http://localhost:5173"], #frontend host
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,28 +25,23 @@ WEATHER_API_KEY = 'c4926db13750fa4cb3bdb6c84f4153f5'
 webui_server_url = 'http://127.0.0.1:7860'
 out_dir = 'api_out'
 
-# Получение погоды по городу или координатам
 @app.get("/weather")
 
 def get_weather_overview(
-    city: str = Query(None),  # Название города (если передано)
-    lat: float = Query(None),  # Широта (если передана)
-    lon: float = Query(None)   # Долгота (если передана)
+    city: str = Query(None),  
+    lat: float = Query(None),  
+    lon: float = Query(None)   
 ):
     """
-    Универсальный маршрут для обработки погоды:
-    - Если передано `city`, ищем координаты через Geocoding API.
-    - Если переданы `lat` и `lon`, определяем название города через Reverse Geocoding API.
-    - Используем координаты для вызова One Call API.
+    Exctract weather data from Openweathermap
     """
-    # Проверяем, что переданы либо city, либо координаты
+    # Check location prompt
     if not city and (lat is None or lon is None):
         raise HTTPException(
             status_code=400,
-            detail="Передайте либо название города (city), либо координаты (lat и lon)."
+            detail="Prompt city name or coordinates."
         )
 
-    # Если передано название города, ищем координаты через Geocoding API
     if city:
         geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city}&limit=1&appid={WEATHER_API_KEY}"
         geo_response = requests.get(geo_url)
@@ -55,29 +50,29 @@ def get_weather_overview(
         geo_data = geo_response.json()[0]
         lat, lon = geo_data["lat"], geo_data["lon"]
 
-    # Если переданы координаты, определяем название города через Reverse Geocoding API
+    # Find city name by coordinates with Reverse Geocoding API
     elif lat is not None and lon is not None:
         reverse_geo_url = f"http://api.openweathermap.org/geo/1.0/reverse?lat={lat}&lon={lon}&limit=1&appid={WEATHER_API_KEY}"
         reverse_geo_response = requests.get(reverse_geo_url)
         if reverse_geo_response.status_code != 200 or not reverse_geo_response.json():
-            raise HTTPException(status_code=404, detail="Не удалось определить название города по координатам.")
+            raise HTTPException(status_code=404, detail="Could not retrieve city by coordinates.")
         reverse_geo_data = reverse_geo_response.json()[0]
         city = reverse_geo_data["name"]+", "+reverse_geo_data["country"]
 
-    # Вызываем One Call Overview API для получения сводки погоды
+    # Call One Call Overview API to get weather overview
     overview_url = f"https://api.openweathermap.org/data/3.0/onecall/overview?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
     overview_response = requests.get(overview_url)
     if overview_response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Ошибка при вызове One Call API.")
+        raise HTTPException(status_code=500, detail="One Call API call error.")
     overview_data = overview_response.json().get("weather_overview")
     location_date = overview_response.json().get("date")
 
-    user_input = f"{location_date}, {overview_data} Describe an outfit suitable for this location and weather. The description should look like a prompt to feed the AI tool that creates an image of the outfit. No additional words, only precise description of the items. Also consider if there are any dressing cultural rules in this region."
+    user_input = f"{city}, {overview_data} Describe an outfit suitable for a woman with this location and weather data to create a prompt for Stable Diffusion. Only precise description of the outfit items, no additional explanations. Also consider if there are any dressing cultural rules in this region."
 
-    # Запрос к OpenAI Chat API
+    # Call OpenAI Chat API
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",  # Или "gpt-3.5-turbo", если у вас нет доступа к gpt-4
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are an assistant that generates creative outfit suggestions based on weather data."},
                 {"role": "user", "content": user_input},
@@ -87,7 +82,6 @@ def get_weather_overview(
         chatgptprompt = response['choices'][0]['message']['content']
         base64_str = call_txt2img_api(chatgptprompt)
 
-        # Возвращаем сгенерированный текст
         return {
             "city": city,
             "latitude": lat,
@@ -118,9 +112,8 @@ def call_api(api_endpoint, **payload):
     return json.loads(response.read().decode('utf-8'))
 
 def call_txt2img_api(generated_prompt):
-
     payload = {
-        "prompt": generated_prompt,  # Используем сгенерированный промпт
+        "prompt": generated_prompt, 
         "negative_prompt": "",
         "seed": 1,
         "steps": 20,
@@ -132,15 +125,13 @@ def call_txt2img_api(generated_prompt):
         "batch_size": 1,
     }
 
-    # Вызов API для генерации изображения
+    # API call for image creating
     response = call_api('sdapi/v1/txt2img', **payload)
-    
-    # Если изображения есть, конвертируем в Base64 и возвращаем
+
     images = response.get("images", [])
     if images:
-        # Декодируем первое изображение
         image_base64 = images[0]
         return image_base64
     else:
-        raise HTTPException(status_code=500, detail="Stable Diffusion не сгенерировал изображение.")
+        raise HTTPException(status_code=500, detail="Error with image generation.")
 

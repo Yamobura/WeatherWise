@@ -14,6 +14,7 @@ export default {
     const locationDate = ref("");
     const propmtforSD = ref("");
     const filteredCities = ref([]);
+    const isPromptVisible = ref(false);
 
     const geonamesBaseUrl = "http://api.geonames.org/searchJSON"; // URL API
     const username = "yamobura"; // Ваш логин GeoNames
@@ -98,6 +99,8 @@ export default {
   } finally {
     isLoading.value = false; // Завершаем загрузку
   }
+
+  this.cityName = '';
 };
 
     // Обработка ответа от бэкэнда
@@ -136,13 +139,13 @@ export default {
 </script>
 
 <template>
-  <div class="main container mx-auto min-h-screen flex flex-col items-center">
+  <div class="main mx-auto min-h-screen flex flex-col items-center">
     <header class="w-full py-4 text-center">
       <h1>WeatherWise</h1>
     </header>
 
-    <div class="flex flex-col items-center justify-center flex-grow">
-      <h1 class="mb-4">Let us know your location to generate an outfit suggestion</h1>
+    <div class="flex flex-col items-center mt-32 flex-grow">
+      <h1 class="mb-6">Let us know your location to generate an outfit suggestion</h1>
 
       <form @submit.prevent="findCity" class="flex items-center">
         <div class="relative w-full">
@@ -151,7 +154,7 @@ export default {
       type="text"
       placeholder="Enter city name"
       @input="fetchCities"
-      class="border p-2 rounded"
+      class="border p-2 pl-4 pr-32 rounded"
     />
 
     <!-- Выпадающий список -->
@@ -166,16 +169,16 @@ export default {
       </li>
     </ul>
           <button
-            type="button"
-            @click="getLocation"
-            class="absolute right-3 top-1/2 transform -translate-y-1/2 bg-white rounded-full p-1 shadow"
-          >
-            <img
-              src="./assets/location.png"
-              alt="Use current location"
-              class="w-5 h-5"
-            />
-          </button>
+  type="button"
+  @click="getLocation"
+  class="absolute right-3 top-1/2 transform -translate-y-1/2 bg-white rounded-full p-1 shadow mr-3"
+>
+  <img
+    src="./assets/location.png"
+    alt="Use current location"
+    class="w-5 h-5"
+  />
+</button>
         </div>
         <button
           type="submit"
@@ -192,37 +195,47 @@ export default {
 
       <div>
   <div v-if="isLoading" class="loading-spinner">
-    <p>Loading...</p>
   </div>
 
   <div v-else>
     <!-- Дата и город -->
-    <div v-if="locationCity && locationDate">
+    <div v-if="locationCity && locationDate" class="text-center mt-6">
       <div><span>Today:</span> {{ locationDate }}</div>
       <div><span>Location:</span> {{ locationCity }}</div>
     </div>
 
     <!-- Обзор погоды -->
-    <div v-if="weatherOverview" class="weather-overview mt-6 text-center">
+     <div class="flex bg-white max-w-4xl mt-6">
+
+      <div class="ml-3 mb-6">
+        <div v-if="weatherOverview" class="weather-overview mt-6 text-center pb-6">
       <h2 class="text-lg font-bold mb-2">Weather Overview</h2>
       <p>{{ weatherOverview }}</p>
     </div>
 
-    <div v-if="propmtforSD" class="promptforSD mt-6 text-center">
-      <h2 class="text-lg font-bold mb-2">Weather Overview</h2>
-      <p>{{ propmtforSD }}</p>
-    </div>
+    <div
+                v-if="propmtforSD"
+                
+                class="promptforSD mt-6 text-center cursor-pointer"
+              >
+                <h2 class="text-lg font-bold mb-2">Prompt for image from ChatGPT</h2>
+                <p>{{ propmtforSD }}</p>
+              </div>
+      </div>
+          
 
     <!-- Картинка -->
-    <div v-if="generatedImage" class="generated-image mt-6">
+    <div v-if="generatedImage" class="generated-image mt-6 mr-3 ml-3 text-center">
       <h2 class="text-lg font-bold mb-2">Generated Image</h2>
-      <img :src="generatedImage" alt="Generated Image" class="max-w-md rounded shadow" />
+      <img :src="generatedImage" alt="Generated Image" class="max-w-xs rounded shadow" />
     </div>
 
     <!-- Ошибка -->
     <div v-if="locationError" class="error mt-4 text-red-500">
       {{ locationError }}
     </div>
+     </div>
+
   </div>
 </div>
 
