@@ -1,8 +1,8 @@
 import urllib.request
-import base64
 import json
 import requests
 import openai
+from typing import Dict
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +17,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+session_data: Dict[str, Dict] = {}
+
 # API keys
 openai.api_key = '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'
 WEATHER_API_KEY = 'c4926db13750fa4cb3bdb6c84f4153f5'
@@ -26,7 +28,6 @@ webui_server_url = 'http://127.0.0.1:7860'
 out_dir = 'api_out'
 
 @app.get("/weather")
-
 def get_weather_overview(
     city: str = Query(None),  
     lat: float = Query(None),  
@@ -67,6 +68,17 @@ def get_weather_overview(
     overview_data = overview_response.json().get("weather_overview")
     location_date = overview_response.json().get("date")
 
+    return {
+        "city": city,
+        "date": location_date,
+        "overview": overview_data
+        }
+   
+@app.get("/chatgpt")
+def generate_prompt(city: str, overview_data: str):
+    """
+    Generate a promt for Stable diffusion with Chat GPT
+    """
     user_input = f"{city}, {overview_data} Describe an outfit suitable for a woman with this location and weather data to create a prompt for Stable Diffusion. Only precise description of the outfit items, no additional explanations. Also consider if there are any dressing cultural rules in this region."
 
     # Call OpenAI Chat API
@@ -80,26 +92,24 @@ def get_weather_overview(
         )
 
         chatgptprompt = response['choices'][0]['message']['content']
-        base64_str = call_txt2img_api(chatgptprompt)
+        return {"chatgptprompt": chatgptprompt}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации текста: {e}")
 
-        return {
-            "city": city,
-            "latitude": lat,
-            "longitude": lon,
-            "date": location_date,
-            "overview": overview_data,
-            "stable_diffusion_prompt": chatgptprompt,
-            "image": base64_str
-        }
+@app.get("/imagegeneration")
+def generate_image(chatgptprompt: str):
+    """
+    Image generation with Stable Diffusion API
+    """
+
+    # Вызов API Stable Diffusion
+    try:
+        base64_image = call_txt2img_api(chatgptprompt)
+        return {"generatedimage": base64_image}
     
     except Exception as e:
         return f"Error generating prompt: {e}"
-    
-
-
-def decode_and_save_base64(base64_str, save_path):
-    with open(save_path, "wb") as file:
-        file.write(base64.b64decode(base64_str))
 
 def call_api(api_endpoint, **payload):
     data = json.dumps(payload).encode('utf-8')

@@ -12,7 +12,7 @@ export default {
     const isLoading = ref(false);
     const locationCity = ref("");
     const locationDate = ref("");
-    const propmtforSD = ref("");
+    const promptForSD = ref("");
     const filteredCities = ref([]);
     const isPromptVisible = ref(false);
 
@@ -49,71 +49,93 @@ export default {
       filteredCities.value = []; // Очистить список после выбора
     };
 
-
-    // Метод для определения текущего местоположения
-    const getLocation = async () => {
-      if (navigator.geolocation) {
-        isLoading.value = true;
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            const { latitude, longitude } = position.coords;
-            locationData.value = { latitude, longitude };
-
-            try {
-          // Отправляем координаты на бэкэнд
-          const response = await fetch(
-            `${backendBaseUrl}weather?lat=${latitude}&lon=${longitude}`
-          );
-          const data = await response.json();
-          handleBackendResponse(data);
-        } catch (error) {
-          console.error("Ошибка получения данных:", error);
-        } finally {
-          isLoading.value = false; // Завершаем загрузку
-        }
-      },
-      (error) => {
-        locationError.value = "Ошибка определения геолокации.";
-        console.error(error);
-        isLoading.value = false; // Завершаем загрузку в случае ошибки
-      }
-    );
-  } else {
-    locationError.value = "Геолокация не поддерживается вашим браузером.";
-  }
-    };
-
-    // Метод для поиска города
-    const findCity = async () => {
-  if (!cityName.value) return;
-
-  isLoading.value = true; // Начало загрузки
-  try {
-    const response = await fetch(
-      `${backendBaseUrl}weather?city=${encodeURIComponent(cityName.value)}`
-    );
-    const data = await response.json();
-    handleBackendResponse(data);
-  } catch (error) {
-    console.error("Ошибка получения данных:", error);
-  } finally {
-    isLoading.value = false; // Завершаем загрузку
-  }
-
-  this.cityName = '';
-};
-
-    // Обработка ответа от бэкэнда
-    const handleBackendResponse = (data) => {
-      if (data.error) {
-        console.error("Ошибка от бэкэнда:", data.error);
+    const getCoordinates = () => {
+      if (!navigator.geolocation) {
+        locationError.value = "Geolocation is not supported by your browser.";
         return;
       }
-      weatherOverview.value = data.overview; // Обзор погоды
-      generatedImage.value = `data:image/png;base64,${data.image}`; // Картинка
+      isLoading.value = true;
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          locationData.value = { latitude, longitude };
+          await getWeatherOverview(latitude, longitude); // Запрос погоды по координатам
+        },
+        (error) => {
+          locationError.value = "Unable to retrieve location.";
+          console.error(error);
+          isLoading.value = false;
+        }
+      );
+    };
+
+    // Метод для определения текущего местоположения
+    const getWeatherOverview = async (lat = null, lon = null) => {
+      isLoading.value = true;
+      try {
+        const params = lat && lon ? `lat=${lat}&lon=${lon}` : `city=${cityName.value}`;
+        const response = await fetch(`${backendBaseUrl}/weather?${params}`);
+        const data = await response.json();
+        handleBackendResponse(data);
+      } catch (error) {
+        console.error("Error fetching weather data:", error);
+      } finally {
+        isLoading.value = false;
+      }
+    };
+
+    // Поиск города вручную
+    const findCity = async () => {
+      if (!cityName.value) return;
+      await getWeatherOverview();
+      cityName.value = ""; // Очистить поле ввода
+    };
+
+     // Генерация промпта через ChatGPT
+     const getChatGptPrompt = async () => {
+      isLoading.value = true;
+      try {
+        const response = await fetch(
+          `${backendBaseUrl}/chatgpt?city=${encodeURIComponent(
+            locationCity.value
+          )}&overview_data=${encodeURIComponent(weatherOverview.value)}`
+        );
+        const data = await response.json();
+        promptForSD.value = data.chatgpt_prompt;
+      } catch (error) {
+        console.error("Error generating prompt:", error);
+      } finally {
+        isLoading.value = false;
+      }
+    };
+
+    // Генерация изображения через Stable Diffusion
+    const generateImage = async () => {
+      isLoading.value = true;
+      try {
+        const response = await fetch(
+          `${backendBaseUrl}/imagegeneration?chatgptprompt=${encodeURIComponent(
+            promptForSD.value
+          )}`
+        );
+        const data = await response.json();
+        generatedImage.value = `data:image/png;base64,${data.image}`;
+      } catch (error) {
+        console.error("Error generating image:", error);
+      } finally {
+        isLoading.value = false;
+      }
+    };
+
+    // Обработка ответа от бэкэнда
+    const handleWeatherResponse = (data) => {
+      if (data.error) {
+        console.error("Backend error:", data.error);
+        return;
+      }
+      weatherOverview.value = data.overview;
       locationCity.value = data.city;
       locationDate.value = data.date;
-      propmtforSD.value = data.stable_diffusion_prompt;
     };
 
     return {
@@ -121,21 +143,19 @@ export default {
       locationData,
       locationError,
       weatherOverview,
+      promptForSD,
       generatedImage,
-      location,
-      propmtforSD,
-      getLocation,
-      findCity,
       locationCity,
       locationDate,
       isLoading,
-      filteredCities,
-      fetchCities,
-      selectCity,
-      findCity
+      getCoordinates,
+      findCity,
+      getChatGptPrompt,
+      generateImage,
     };
   },
 };
+
 </script>
 
 <template>
@@ -214,12 +234,12 @@ export default {
     </div>
 
     <div
-                v-if="propmtforSD"
+                v-if="promptforSD"
                 
                 class="promptforSD mt-6 text-center cursor-pointer"
               >
                 <h2 class="text-lg font-bold mb-2">Prompt for image from ChatGPT</h2>
-                <p>{{ propmtforSD }}</p>
+                <p>{{ promptforSD }}</p>
               </div>
       </div>
           
@@ -239,12 +259,6 @@ export default {
   </div>
 </div>
 
-
-       
-
-     
-
-      
     </div>
   </div>
 </template>
