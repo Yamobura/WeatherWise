@@ -6,6 +6,7 @@ from typing import Dict
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from openai import OpenAI
 
 app = FastAPI()
 
@@ -83,7 +84,8 @@ def generate_prompt(city: str, overview_data: str):
 
     # Call OpenAI Chat API
     try:
-        response = openai.ChatCompletion.create(
+        client = OpenAI(api_key=openai.api_key)
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are an assistant that generates creative outfit suggestions based on weather data."},
@@ -91,7 +93,7 @@ def generate_prompt(city: str, overview_data: str):
             ],
         )
 
-        chatgptprompt = response['choices'][0]['message']['content']
+        chatgptprompt = response.choices[0].message.content
         return {"chatgptprompt": chatgptprompt}
     
     except Exception as e:
