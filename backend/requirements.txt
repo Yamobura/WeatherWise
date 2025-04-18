@@ -1,0 +1,6 @@
+fastapi[all]
+requests
+openai
+python-multipart
+uvicorn
+python-dotenv 
