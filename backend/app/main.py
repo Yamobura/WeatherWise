@@ -6,7 +6,7 @@ from typing import Dict
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from config import OPENAI_API_KEY, WEATHER_API_KEY, WEBUI_SERVER_URL, OUT_DIR
+from config import OPENAI_API_KEY, WEATHER_API_KEY, WEBUI_SERVER_URL
 from openai import OpenAI
 
 app = FastAPI()
@@ -26,7 +26,6 @@ openai.api_key = OPENAI_API_KEY
 
 # Stable Diffusion settings
 webui_server_url = WEBUI_SERVER_URL
-out_dir = OUT_DIR
 
 @app.get("/weather")
 def get_weather_overview(
@@ -131,7 +130,7 @@ def call_txt2img_api(generated_prompt):
         "steps": 20,
         "width": 512,
         "height": 512,
-        "cfg_scale": 7,
+        "cfg_scale": 27,
         "sampler_name": "DPM++ 2M",
         "n_iter": 1,
         "batch_size": 1,
