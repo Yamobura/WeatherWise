@@ -2,12 +2,6 @@
 
 WeatherWise is a web application that provides weather-appropriate outfit suggestions based on current weather conditions. It combines weather data with AI-powered outfit recommendations and generates visual representations of suggested outfits.
 
-## Features
-
-- 🌤️ Real-time weather data for any location
-- 👗 AI-generated outfit suggestions based on weather conditions
-- 🎨 AI-generated visual representation of suggested outfits
-- 📱 Responsive web interface
 
 ## Tech Stack
 
