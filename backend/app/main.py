@@ -6,6 +6,7 @@ from typing import Dict
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from config import OPENAI_API_KEY, WEATHER_API_KEY, WEBUI_SERVER_URL, OUT_DIR
 from openai import OpenAI
 
 app = FastAPI()
@@ -21,12 +22,11 @@ app.add_middleware(
 session_data: Dict[str, Dict] = {}
 
 # API keys
-openai.api_key = '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'
-WEATHER_API_KEY = 'c4926db13750fa4cb3bdb6c84f4153f5'
+openai.api_key = OPENAI_API_KEY
 
 # Stable Diffusion settings
-webui_server_url = 'http://127.0.0.1:7860'
-out_dir = 'api_out'
+webui_server_url = WEBUI_SERVER_URL
+out_dir = OUT_DIR
 
 @app.get("/weather")
 def get_weather_overview(
@@ -80,7 +80,7 @@ def generate_prompt(city: str, overview_data: str):
     """
     Generate a promt for Stable diffusion with Chat GPT
     """
-    user_input = f"{city}, {overview_data} Describe an outfit suitable for a woman with this location and weather data to create a prompt for Stable Diffusion. Only precise description of the outfit items, no additional explanations. Also consider if there are any dressing cultural rules in this region."
+    user_input = f"{city}, {overview_data} Describe an outfit suitable for a woman with this location and weather data to create a prompt for Stable Diffusion. Include location in the prompt. Only precise description of the outfit items, no additional explanations. Also consider if there are any dressing cultural rules in this region (e.g. hijab, burqa, etc.) but don't mention it in the prompt. Include phrase 'full body shot' in the prompt."
 
     # Call OpenAI Chat API
     try:
@@ -97,7 +97,7 @@ def generate_prompt(city: str, overview_data: str):
         return {"chatgptprompt": chatgptprompt}
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка генерации текста: {e}")
+        raise HTTPException(status_code=500, detail=f"Text error generation: {e}")
 
 @app.get("/imagegeneration")
 def generate_image(chatgptprompt: str):

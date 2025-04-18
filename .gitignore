@@ -20,6 +20,11 @@ var/
 .installed.cfg
 *.egg
 
+# Virtual Environment
+venv/
+ENV/
+env/
+
 # Node
 node_modules/
 npm-debug.log
@@ -32,6 +37,9 @@ yarn-error.log
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Configuration files
+backend/app/config.py
 
 # IDE
 .idea/
